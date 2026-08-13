@@ -3,14 +3,11 @@
 namespace Chatify\Http\Controllers\Api;
 
 use Illuminate\Support\Str;
-use App\Models\CustomerInfo as User;
+use App\Models\Customer as User;
 use Illuminate\Http\Request;
 use App\Models\ChMessage as Message;
 use App\Models\ChFavorite as Favorite;
 use App\Models\ChMessage;
-use App\Models\CustomerBlock;
-use App\Services\Notification\FirebaseService;
-use Carbon\Carbon;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -169,7 +166,7 @@ class MessagesController extends Controller
                 'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
-                'sent_by' => $request['type'] == 'driver' ? 'driver_admin' : '',
+                'sent_by' => $request['type'] == 'shipper' ? 'shipper_admin' : '',
                 'attachment' => ($attachment) ? json_encode((object)[
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
@@ -256,7 +253,7 @@ class MessagesController extends Controller
                 'from_id' => $fromId,
                 'to_id' => $request['to_id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
-                'sent_by' => $request['type'] == 'driver' ? 'driver_user' : 'user_driver',
+                'sent_by' => $request['type'] == 'shipper' ? 'shipper_delivery' : 'delivery_shipper',
                 'attachment' => ($attachment) ? json_encode((object)[
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
@@ -273,12 +270,7 @@ class MessagesController extends Controller
                 'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
-
-            if($request['type'] == 'user') {
-                $this->sendPushNotificationCustomer(Auth::guard('sanctum')->user()->name, $request['message'], $request['id']);
-            }else{
-                $this->sendPushNotificationRider(Auth::guard('sanctum')->user()->name, $request['message'], $request['id']);
-            }
+            
             // }
         }
 
@@ -290,38 +282,6 @@ class MessagesController extends Controller
             'tempID' => $request['temporaryMsgId'],
         ]);
     }
-
-    // private function getAttachmentLink($attachment)
-    // {
-    //     if (!$attachment) {
-    //         return [null, null];
-    //     }
-
-    //     // If attachment is a JSON string with 'file' and 'type'
-    //     if (Str::startsWith($attachment, '{')) {
-    //         $data = json_decode($attachment, true);
-
-    //         return [
-    //             $data['file'] ?? null,                  // attachment URL
-    //             $data['type'] ?? $data['attachment_type'] ?? null,  // type like image/audio
-    //         ];
-    //     }
-
-    //     // If it's already a direct link (string), try to guess type from extension
-    //     $extension = strtolower(pathinfo($attachment, PATHINFO_EXTENSION));
-    //     $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-    //     $audioExtensions = ['mp3', 'wav', 'ogg'];
-
-    //     if (in_array($extension, $imageExtensions)) {
-    //         $type = 'image';
-    //     } elseif (in_array($extension, $audioExtensions)) {
-    //         $type = 'audio';
-    //     } else {
-    //         $type = null;
-    //     }
-
-    //     return [$attachment, $type];
-    // }
 
     private function getAttachmentLink($attachment)
     {
@@ -712,168 +672,5 @@ class MessagesController extends Controller
         return Response::json([
             'status' => $status,
         ], 200);
-    }
-
-    public function sendPushNotificationCustomer($title, $body, $token)
-    {
-        if ($token) {
-
-            $serviceAccountKeyFile = public_path('firebase/rain-customer-firebase.json');
-            $projectId = json_decode(file_get_contents($serviceAccountKeyFile), true)['project_id'];
-            $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
-
-            // Get OAuth 2.0 access token
-            try {
-                $accessToken = $this->getAccessToken();
-            } catch (\Exception $e) {
-                return response()->json([
-                    'error' => 'Failed to generate access token',
-                    'details' => $e->getMessage()
-                ], 500);
-            }
-
-            // Define the payload (message body) for the FCM notification
-            $payload = [
-                'message' => [
-                    'token' => $token,
-                    'notification' => [
-                        'title' => $title,
-                        'body'  => $body,
-                    ],
-                    'android' => [
-                        'priority' => 'high',
-                    ],
-                    'apns' => [
-                        'headers' => [
-                            'apns-priority'  => '10',
-                            'apns-push-type' => 'alert',
-                        ],
-                        'payload' => [ // ✅ FIXED: payload
-                            'aps' => [
-                                'sound' => 'default',
-                                // optional but recommended:
-                                'alert' => [
-                                    'title' => $title,
-                                    'body'  => $body,
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ];
-
-
-            try {
-                // Create a new Guzzle HTTP client
-                $client = new Client();
-
-                // Send the notification request to FCM HTTP v1 API
-                $response = $client->post($url, [
-                    'headers' => [
-                        'Authorization' => 'Bearer ' . $accessToken,  // Use OAuth 2.0 Bearer token
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $payload,  // Send the payload as JSON
-                ]);
-            }
-            catch (\GuzzleHttp\Exception\ClientException $e) {
-                if ($e->getCode() === 404) {
-                    Log::warning("🔥 Token invalid or project mismatch: {$token}");
-                    // Optionally, delete or null the token from DB
-                }
-            }
-            
-        }
-    }
-
-    public function sendPushNotificationRider($title, $body, $token)
-    {
-        if ($token) {
-
-            $serviceAccountKeyFile = public_path('firebase/rain-rider-firebase.json');
-            $projectId = json_decode(file_get_contents($serviceAccountKeyFile), true)['project_id'];
-            $url = "https://fcm.googleapis.com/v1/projects/{$projectId}/messages:send";
-
-            // Get OAuth 2.0 access token
-            try {
-                $accessToken = $this->getAccessToken();
-            } catch (\Exception $e) {
-                return response()->json([
-                    'error' => 'Failed to generate access token',
-                    'details' => $e->getMessage()
-                ], 500);
-            }
-
-            // Define the payload (message body) for the FCM notification
-            $payload = [
-                'message' => [
-                    'token' => $token,
-                    'notification' => [
-                        'title' => $title,
-                        'body'  => $body,
-                    ],
-                    'android' => [
-                        'priority' => 'high',
-                    ],
-                    'apns' => [
-                        'headers' => [
-                            'apns-priority'  => '10',
-                            'apns-push-type' => 'alert',
-                        ],
-                        'payload' => [ // ✅ FIXED: payload
-                            'aps' => [
-                                'sound' => 'default',
-                                // optional but recommended:
-                                'alert' => [
-                                    'title' => $title,
-                                    'body'  => $body,
-                                ],
-                            ],
-                        ],
-                    ],
-                ],
-            ];
-
-
-            try {
-                // Create a new Guzzle HTTP client
-                $client = new Client();
-
-                // Send the notification request to FCM HTTP v1 API
-                $response = $client->post($url, [
-                    'headers' => [
-                        'Authorization' => 'Bearer ' . $accessToken,  // Use OAuth 2.0 Bearer token
-                        'Content-Type' => 'application/json',
-                    ],
-                    'json' => $payload,  // Send the payload as JSON
-                ]);
-            }
-            catch (\GuzzleHttp\Exception\ClientException $e) {
-                if ($e->getCode() === 404) {
-                    Log::warning("🔥 Token invalid or project mismatch: {$token}");
-                    // Optionally, delete or null the token from DB
-                }
-            }
-            
-        }
-    }
-
-    private function getAccessToken()
-    {
-        $serviceAccountKeyFile = public_path('firebase/rain-rider-firebase.json');
-        if (!file_exists($serviceAccountKeyFile)) {
-            throw new \Exception('Service account key file does not exist at path: ' . $serviceAccountKeyFile);
-        }
-
-        try {
-            $scopes = ['https://www.googleapis.com/auth/firebase.messaging'];
-            $credentials = new ServiceAccountCredentials($scopes, $serviceAccountKeyFile);
-            // Fetch the OAuth 2.0 access token
-            $accessToken = $credentials->fetchAuthToken();
-            return $accessToken['access_token'];
-        } catch (\Exception $e) {
-            Log::error('Error creating ServiceAccountCredentials: ' . $e->getMessage());
-            throw $e;  // Rethrow or handle the exception
-        }
     }
 }

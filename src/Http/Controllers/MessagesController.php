@@ -3,11 +3,11 @@
 namespace Chatify\Http\Controllers;
 
 use Google_Client;
-use App\Models\CustomerInfo;
-use App\Models\User as Admin;
+use App\Models\Customer;
+use App\Models\Admin;
 use App\Models\FcmTokenKey;
 use Illuminate\Support\Str;
-use App\Models\CustomerInfo as User;
+use App\Models\Customer as User;
 use Illuminate\Http\Request;
 use App\Models\ChMessage as Message;
 use Illuminate\Http\JsonResponse;
@@ -598,7 +598,7 @@ class MessagesController extends Controller
 
         $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";        
 
-        $customer = CustomerInfo::with('fcmTokens')->find($customerId);
+        $customer = Customer::with('fcmTokens')->find($customerId);
 
         if (!$customer || $customer->fcmTokens->isEmpty()) {
             return false;
