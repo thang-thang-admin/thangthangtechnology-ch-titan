@@ -166,7 +166,7 @@ class MessagesController extends Controller
                 'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
-                'sent_by' => $request['type'] == 'shipper' ? 'shipper_admin' : '',
+                'sent_by' => $request['type'] == 'shipper' ? 'shipper_admin' : 'shipper_admin',
                 'attachment' => ($attachment) ? json_encode((object)[
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
