@@ -36,7 +36,7 @@ class MessagesController extends Controller
     {
         return Chatify::pusherAuth(
             $request->user(),
-            Auth::guard('sanctum')->user(),
+            Auth::user(),
             $request['channel_name'],
             $request['socket_id']
         );
@@ -50,11 +50,14 @@ class MessagesController extends Controller
      */
     public function index($id = null)
     {
-        $messenger_color = Auth::guard('sanctum')->user()->messenger_color;
+        $user = Auth::user();
+
+        $messenger_color = $user?->messenger_color;
+
         return view('Chatify::pages.app', [
             'id' => $id ?? 0,
-            'messengerColor' => $messenger_color ? $messenger_color : Chatify::getFallbackColor(),
-            'dark_mode' => Auth::guard('sanctum')->user()->dark_mode < 1 ? 'light' : 'dark',
+            'messengerColor' => $messenger_color ?: Chatify::getFallbackColor(),
+            'dark_mode' => $user && $user->dark_mode < 1 ? 'light' : 'dark',
         ]);
     }
 
@@ -165,7 +168,7 @@ class MessagesController extends Controller
 
         if (!$error->status) {
             $message = Chatify::newMessage([
-                'from_id' => Auth::guard('sanctum')->user()->id,
+                'from_id' => Auth::user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => 'admin',
@@ -176,7 +179,7 @@ class MessagesController extends Controller
             ]);
             $messageData = Chatify::parseMessage($message);
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => Auth::guard('sanctum')->user()->id,
+                'from_id' => Auth::user()->id,
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
@@ -202,7 +205,7 @@ class MessagesController extends Controller
      */
     public function fetch(Request $request)
     {
-        $query = Chatify::fetchMessagesQuery($request['id'], Auth::guard('sanctum')->user()->id)->where('sent_by','shipper_admin')->latest();
+        $query = Chatify::fetchMessagesQuery($request['id'], Auth::user()->id)->where('sent_by','shipper_admin')->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
         $totalMessages = $messages->total();
         $lastPage = $messages->lastPage();
@@ -262,8 +265,8 @@ class MessagesController extends Controller
                 ->orOn('ch_messages.to_id', '=', 'customers.id');
         })
             ->where(function ($q) {
-                $q->where('ch_messages.from_id', Auth::guard('sanctum')->user()->id)
-                    ->orWhere('ch_messages.to_id', Auth::guard('sanctum')->user()->id);
+                $q->where('ch_messages.from_id', Auth::user()->id)
+                    ->orWhere('ch_messages.to_id', Auth::user()->id);
             })
             // ->where('customers.id','!=',Auth::guard('sanctum')->user()->id)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
@@ -340,7 +343,7 @@ class MessagesController extends Controller
     public function getFavorites(Request $request)
     {
         $favoritesList = null;
-        $favorites = Favorite::where('user_id', Auth::guard('sanctum')->user()->id);
+        $favorites = Favorite::where('user_id', Auth::user()->id);
         foreach ($favorites->get() as $favorite) {
             // get user data
             $user = User::where('id', $favorite->favorite_id)->first();
@@ -453,14 +456,14 @@ class MessagesController extends Controller
         // dark mode
         if ($request['dark_mode']) {
             $request['dark_mode'] == "dark"
-                ? Admin::where('id', Auth::guard('sanctum')->user()->id)->update(['dark_mode' => 1])  // Make Dark
-                : Admin::where('id', Auth::guard('sanctum')->user()->id)->update(['dark_mode' => 0]); // Make Light
+                ? Admin::where('id', Auth::user()->id)->update(['dark_mode' => 1])  // Make Dark
+                : Admin::where('id', Auth::user()->id)->update(['dark_mode' => 0]); // Make Light
         }
 
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
-            Admin::where('id', Auth::guard('sanctum')->user()->id)
+            Admin::where('id', Auth::user()->id)
                 ->update(['messenger_color' => $messenger_color]);
         }
         // if there is a [file]
@@ -473,15 +476,15 @@ class MessagesController extends Controller
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
                 if (in_array(strtolower($file->extension()), $allowed_images)) {
                     // delete the older one
-                    if (Auth::guard('sanctum')->user()->avatar != config('chatify.user_avatar.default')) {
-                        $avatar = Auth::guard('sanctum')->user()->avatar;
+                    if (Auth::user()->avatar != config('chatify.user_avatar.default')) {
+                        $avatar = Auth::user()->avatar;
                         if (Chatify::storage()->exists($avatar)) {
                             Chatify::storage()->delete($avatar);
                         }
                     }
                     // upload
                     $avatar = Str::uuid() . "." . $file->extension();
-                    $update = Admin::where('id', Auth::guard('sanctum')->user()->id)->update(['avatar' => $avatar]);
+                    $update = Admin::where('id', Auth::user()->id)->update(['avatar' => $avatar]);
                     $file->storeAs(config('chatify.user_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
                     $success = $update ? 1 : 0;
                 } else {
@@ -511,7 +514,7 @@ class MessagesController extends Controller
     public function setActiveStatus(Request $request)
     {
         $activeStatus = $request['status'] > 0 ? 1 : 0;
-        $status = User::where('id', Auth::guard('sanctum')->user()->id)->update(['active_status' => $activeStatus]);
+        $status = User::where('id', Auth::user()->id)->update(['active_status' => $activeStatus]);
         return Response::json([
             'status' => $status,
         ], 200);
