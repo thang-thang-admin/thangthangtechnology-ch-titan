@@ -501,6 +501,12 @@ class ChatifyMessenger
      */
     public function getAttachmentUrl($attachment_name)
     {
+        // If the attachment is already a full URL (e.g. stored on S3),
+        // return it as-is to avoid double-encoding the URL.
+        if (filter_var($attachment_name, FILTER_VALIDATE_URL)) {
+            return $attachment_name;
+        }
+
         return asset('image/public/'.config('chatify.attachments.folder') . '/' . $attachment_name);
     }
 }
