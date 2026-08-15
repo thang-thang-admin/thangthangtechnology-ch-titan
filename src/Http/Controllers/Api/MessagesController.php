@@ -209,7 +209,8 @@ class MessagesController extends Controller
         $attachment = null;
         $attachment_title = null;
 
-        $user = Auth::guard('admin')->user();
+        $user = $request->user('sanctum') ?? Auth::user();
+
 
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
@@ -269,8 +270,9 @@ class MessagesController extends Controller
 
             // send to user using pusher
             // if (Auth::guard('admin')->user()->id != $request['id']) {
+            // send to user using pusher
             Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
-                'from_id' => Auth::guard('admin')->user()->id,
+                'from_id' => $fromId, // <-- Auth::guard('admin')->user()->id အစား အပေါ်မှာ ယူထားတဲ့ $fromId ကို သုံးပါ
                 'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
