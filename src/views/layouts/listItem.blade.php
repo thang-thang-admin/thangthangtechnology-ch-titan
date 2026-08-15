@@ -8,7 +8,7 @@
             </div>
             </td>
             <td>
-                <p data-id="{{ Auth::user()->id }}" data-type="user">Saved Messages <span>You</span></p>
+                <p data-id="{{ optional(auth()->user())->id }}" data-type="user">Saved Messages <span>You</span></p>
                 <span>Save messages secretly</span>
             </td>
         </tr>
@@ -40,7 +40,7 @@ $lastMessageBody = strlen($lastMessageBody) > 30 ? mb_substr($lastMessageBody, 0
         <span>
             {{-- Last Message user indicator --}}
             {!!
-                $lastMessage->from_id == Auth::user()->id
+                $lastMessage->from_id == optional(auth()->user())->id
                 ? '<span class="lastMessageIndicator">You :</span>'
                 : ''
             !!}

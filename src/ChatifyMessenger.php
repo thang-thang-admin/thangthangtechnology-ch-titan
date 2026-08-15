@@ -231,8 +231,14 @@ class ChatifyMessenger
      */
     public function makeSeen($user_id)
     {
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return 0;
+        }
+
         Message::Where('from_id', $user_id)
-                ->where('to_id', Auth::guard('sanctum')->user()->id)
+                ->where('to_id', $authId)
                 ->where('seen', 0)
                 ->update(['seen' => 1]);
         return 1;
@@ -257,7 +263,13 @@ class ChatifyMessenger
      */
     public function countUnseenMessages($user_id)
     {
-        return Message::where('from_id', $user_id)->where('to_id', Auth::guard('sanctum')->user()->id)->where('seen', 0)->count();
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return 0;
+        }
+
+        return Message::where('from_id', $user_id)->where('to_id', $authId)->where('seen', 0)->count();
     }
 
     /**
@@ -318,7 +330,13 @@ class ChatifyMessenger
      */
     public function inFavorite($user_id)
     {
-        return Favorite::where('user_id', Auth::guard('sanctum')->user()->id)
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return false;
+        }
+
+        return Favorite::where('user_id', $authId)
                         ->where('favorite_id', $user_id)->count() > 0
                         ? true : false;
     }
@@ -332,16 +350,22 @@ class ChatifyMessenger
      */
     public function makeInFavorite($user_id, $action)
     {
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return false;
+        }
+
         if ($action > 0) {
             // Star
             $star = new Favorite();
-            $star->user_id = Auth::guard('sanctum')->user()->id;
+            $star->user_id = $authId;
             $star->favorite_id = $user_id;
             $star->save();
             return $star ? true : false;
         } else {
             // UnStar
-            $star = Favorite::where('user_id', Auth::guard('sanctum')->user()->id)->where('favorite_id', $user_id)->delete();
+            $star = Favorite::where('user_id', $authId)->where('favorite_id', $user_id)->delete();
             return $star ? true : false;
         }
     }
@@ -418,6 +442,19 @@ class ChatifyMessenger
         } catch (Exception $e) {
             throw new Exception($e->getMessage());
         }
+    }
+
+    /**
+     * Safely resolve the authenticated user id from the available guards
+     * (sanctum guard first, then the default guard).
+     *
+     * @return int|null
+     */
+    public function getAuthId()
+    {
+        $user = Auth::guard('sanctum')->user() ?? Auth::user();
+
+        return $user?->id;
     }
 
     /**

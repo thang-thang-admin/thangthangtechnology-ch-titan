@@ -320,9 +320,12 @@ class MessagesController extends Controller
     }
 
 
-    public function getMessages($toId)
+    public function getMessages(Request $request, $toId)
     {
-        if (!Auth::check()) {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized',
@@ -338,12 +341,6 @@ class MessagesController extends Controller
                 'message' => 'Recipient not found',
                 'data' => null,
             ], 200);
-        }
-
-        $user = $request->user('sanctum') ?? Auth::user();
-
-        if (!$user) {
-            return response()->json(['error' => 'Unauthenticated'], 401);
         }
 
         $userId = $user->id;
@@ -457,16 +454,25 @@ class MessagesController extends Controller
      */
     public function getContacts(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $fromId = $user->id;
+
         // get all users that received/sent message from/to [Auth user]
         $users = Message::join('customers',  function ($join) {
             $join->on('ch_messages.from_id', '=', 'customers.id')
                 ->orOn('ch_messages.to_id', '=', 'customers.id');
         })
-            ->where(function ($q) {
-                $q->where('ch_messages.from_id', Auth::user()->id)
-                    ->orWhere('ch_messages.to_id', Auth::user()->id);
+            ->where(function ($q) use ($fromId) {
+                $q->where('ch_messages.from_id', $fromId)
+                    ->orWhere('ch_messages.to_id', $fromId);
             })
-            ->where('customers.id', '!=', Auth::user()->id)
+            ->where('customers.id', '!=', $fromId)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
             ->orderBy('max_created_at', 'desc')
             ->groupBy('customers.id')
@@ -506,7 +512,14 @@ class MessagesController extends Controller
      */
     public function getFavorites(Request $request)
     {
-        $favorites = Favorite::where('user_id', Auth::user()->id)->get();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $favorites = Favorite::where('user_id', $user->id)->get();
         foreach ($favorites as $favorite) {
             $favorite->user = User::where('id', $favorite->favorite_id)->first();
         }
@@ -524,8 +537,15 @@ class MessagesController extends Controller
      */
     public function search(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
         $input = trim(filter_var($request['input']));
-        $records = User::where('id', '!=', Auth::user()->id)
+        $records = User::where('id', '!=', $user->id)
             ->where('name', 'LIKE', "%{$input}%")
             ->paginate($request->per_page ?? $this->perPage);
         foreach ($records->items() as $index => $record) {
@@ -595,20 +615,29 @@ class MessagesController extends Controller
 
     public function updateSettings(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $fromId = $user->id;
+
         $msg = null;
         $error = $success = 0;
 
         // dark mode
         if ($request['dark_mode']) {
             $request['dark_mode'] == "dark"
-                ? User::where('id', Auth::user()->id)->update(['dark_mode' => 1])  // Make Dark
-                : User::where('id', Auth::user()->id)->update(['dark_mode' => 0]); // Make Light
+                ? User::where('id', $fromId)->update(['dark_mode' => 1])  // Make Dark
+                : User::where('id', $fromId)->update(['dark_mode' => 0]); // Make Light
         }
 
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
-            User::where('id', Auth::user()->id)
+            User::where('id', $fromId)
                 ->update(['messenger_color' => $messenger_color]);
         }
         // if there is a [file]
@@ -621,15 +650,15 @@ class MessagesController extends Controller
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
                 if (in_array(strtolower($file->extension()), $allowed_images)) {
                     // delete the older one
-                    if (Auth::user()->avatar != config('chatify.user_avatar.default')) {
-                        $path = Chatify::getUserAvatarUrl(Auth::user()->avatar);
+                    if ($user->avatar != config('chatify.user_avatar.default')) {
+                        $path = Chatify::getUserAvatarUrl($user->avatar);
                         if (Chatify::storage()->exists($path)) {
                             Chatify::storage()->delete($path);
                         }
                     }
                     // upload
                     $avatar = Str::uuid() . "." . $file->extension();
-                    $update = User::where('id', Auth::user()->id)->update(['avatar' => $avatar]);
+                    $update = User::where('id', $fromId)->update(['avatar' => $avatar]);
                     $file->storeAs(config('chatify.user_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
                     $success = $update ? 1 : 0;
                 } else {
@@ -658,8 +687,15 @@ class MessagesController extends Controller
      */
     public function setActiveStatus(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
         $activeStatus = $request['status'] > 0 ? 1 : 0;
-        $status = User::where('id', Auth::user()->id)->update(['active_status' => $activeStatus]);
+        $status = User::where('id', $user->id)->update(['active_status' => $activeStatus]);
         return Response::json([
             'status' => $status,
         ], 200);

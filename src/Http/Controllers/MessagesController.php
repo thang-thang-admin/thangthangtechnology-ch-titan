@@ -34,11 +34,11 @@ class MessagesController extends Controller
      */
     public function pusherAuth(Request $request)
     {
-        // Request ထဲက user ကို အရင်ဆွဲထုတ်မယ်၊ မရှိရင် Auth::user() ကို သုံးမယ်
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
 
         if (!$user) {
-            return response()->json(['message' => 'Not authenticated'], 403);
+            return response()->json(['message' => 'Not authenticated'], 401);
         }
 
         return Chatify::pusherAuth(
@@ -57,9 +57,14 @@ class MessagesController extends Controller
      */
     public function index(Request $request, $id = null)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
 
-        $messenger_color = $user?->messenger_color;
+        if (!$user) {
+            abort(401, 'Unauthenticated');
+        }
+
+        $messenger_color = $user->messenger_color;
 
         return view('Chatify::pages.app', [
             'id' => $id ?? 0,
@@ -113,7 +118,14 @@ class MessagesController extends Controller
      */
     public function send(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $fromId = $user->id;
 
         // default variables
         $error = (object)[
@@ -177,7 +189,7 @@ class MessagesController extends Controller
 
         if (!$error->status) {
             $message = Chatify::newMessage([
-                'from_id' => $user->id,
+                'from_id' => $fromId,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => 'admin',
@@ -188,7 +200,7 @@ class MessagesController extends Controller
             ]);
             $messageData = Chatify::parseMessage($message);
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => $user->id,
+                'from_id' => $fromId,
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
@@ -214,7 +226,12 @@ class MessagesController extends Controller
      */
     public function fetch(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
 
         $query = Chatify::fetchMessagesQuery($request['id'], $user->id)->where('sent_by','shipper_admin')->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
@@ -270,16 +287,23 @@ class MessagesController extends Controller
      */
     public function getContacts(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $fromId = $user->id;
 
         // get all users that received/sent message from/to [Auth user]
         $users = Message::join('customers',  function ($join) {
             $join->on('ch_messages.from_id', '=', 'customers.id')
                 ->orOn('ch_messages.to_id', '=', 'customers.id');
         })
-            ->where(function ($q) use ($user) {
-                $q->where('ch_messages.from_id', $user->id)
-                    ->orWhere('ch_messages.to_id', $user->id);
+            ->where(function ($q) use ($fromId) {
+                $q->where('ch_messages.from_id', $fromId)
+                    ->orWhere('ch_messages.to_id', $fromId);
             })
             // ->where('customers.id','!=',Auth::guard('sanctum')->user()->id)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
@@ -355,7 +379,12 @@ class MessagesController extends Controller
      */
     public function getFavorites(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
 
         $favoritesList = null;
         $favorites = Favorite::where('user_id', $user->id);
@@ -465,7 +494,14 @@ class MessagesController extends Controller
 
     public function updateSettings(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $fromId = $user->id;
 
         $msg = null;
         $error = $success = 0;
@@ -473,14 +509,14 @@ class MessagesController extends Controller
         // dark mode
         if ($request['dark_mode']) {
             $request['dark_mode'] == "dark"
-                ? Admin::where('id', $user->id)->update(['dark_mode' => 1])  // Make Dark
-                : Admin::where('id', $user->id)->update(['dark_mode' => 0]); // Make Light
+                ? Admin::where('id', $fromId)->update(['dark_mode' => 1])  // Make Dark
+                : Admin::where('id', $fromId)->update(['dark_mode' => 0]); // Make Light
         }
 
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
-            Admin::where('id', $user->id)
+            Admin::where('id', $fromId)
                 ->update(['messenger_color' => $messenger_color]);
         }
         // if there is a [file]
@@ -501,7 +537,7 @@ class MessagesController extends Controller
                     }
                     // upload
                     $avatar = Str::uuid() . "." . $file->extension();
-                    $update = Admin::where('id', $user->id)->update(['avatar' => $avatar]);
+                    $update = Admin::where('id', $fromId)->update(['avatar' => $avatar]);
                     $file->storeAs(config('chatify.user_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
                     $success = $update ? 1 : 0;
                 } else {
@@ -530,7 +566,12 @@ class MessagesController extends Controller
      */
     public function setActiveStatus(Request $request)
     {
-        $user = $request->user() ?? Auth::user();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
 
         $activeStatus = $request['status'] > 0 ? 1 : 0;
         $status = User::where('id', $user->id)->update(['active_status' => $activeStatus]);
