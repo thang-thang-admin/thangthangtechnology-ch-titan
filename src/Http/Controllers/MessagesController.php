@@ -34,9 +34,16 @@ class MessagesController extends Controller
      */
     public function pusherAuth(Request $request)
     {
+        // Request ထဲက user ကို အရင်ဆွဲထုတ်မယ်၊ မရှိရင် Auth::user() ကို သုံးမယ်
+        $user = $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 403);
+        }
+
         return Chatify::pusherAuth(
-            $request->user(),
-            Auth::user(),
+            $user,
+            $user,
             $request['channel_name'],
             $request['socket_id']
         );

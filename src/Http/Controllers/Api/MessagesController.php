@@ -33,14 +33,18 @@ class MessagesController extends Controller
      */
     public function pusherAuth(Request $request)
     {
-        if (Auth::check()) {
+        // sanctum guard သို့မဟုတ် web guard တစ်ခုခုဖြင့် User ကို အသေအချာ ဆွဲထုတ်ရန်
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if ($user) {
             return Chatify::pusherAuth(
-                $request->user('sanctum'),
-                Auth::user(),
+                $user,
+                $user,
                 $request['channel_name'],
                 $request['socket_id']
             );
         }
+
         return response()->json(['message' => 'Not authenticated'], 403);
     }
 
