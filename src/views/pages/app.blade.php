@@ -1,3 +1,4 @@
+<div style="height: 85vh">
 @include('Chatify::layouts.headLinks')
 <div class="messenger">
     {{-- ----------------------Users/Groups lists side---------------------- --}}
@@ -63,7 +64,7 @@
                 {{-- header buttons --}}
                 <nav class="m-header-right">
                     <a href="#" class="add-to-favorite"><i class="fas fa-star"></i></a>
-                    <a href="/support-chat"><i class="fas fa-home"></i></a>
+                    <a href="/system/dashboard"><i class="fas fa-home"></i></a>
                     <a href="#" class="show-infoSide"><i class="fas fa-info-circle"></i></a>
                 </nav>
             </nav>
@@ -110,3 +111,5 @@
 
 @include('Chatify::layouts.modals')
 @include('Chatify::layouts.footerLinks')
+</div>
+
