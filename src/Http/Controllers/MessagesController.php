@@ -55,9 +55,9 @@ class MessagesController extends Controller
      * @param int $id
      * @return \Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\View\Factory|\Illuminate\Contracts\View\View
      */
-    public function index($id = null)
+    public function index(Request $request, $id = null)
     {
-        $user = Auth::user();
+        $user = $request->user() ?? Auth::user();
 
         $messenger_color = $user?->messenger_color;
 
@@ -113,6 +113,8 @@ class MessagesController extends Controller
      */
     public function send(Request $request)
     {
+        $user = $request->user() ?? Auth::user();
+
         // default variables
         $error = (object)[
             'status' => 0,
@@ -175,7 +177,7 @@ class MessagesController extends Controller
 
         if (!$error->status) {
             $message = Chatify::newMessage([
-                'from_id' => Auth::user()->id,
+                'from_id' => $user->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => 'admin',
@@ -186,7 +188,7 @@ class MessagesController extends Controller
             ]);
             $messageData = Chatify::parseMessage($message);
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => Auth::user()->id,
+                'from_id' => $user->id,
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
@@ -212,7 +214,9 @@ class MessagesController extends Controller
      */
     public function fetch(Request $request)
     {
-        $query = Chatify::fetchMessagesQuery($request['id'], Auth::user()->id)->where('sent_by','shipper_admin')->latest();
+        $user = $request->user() ?? Auth::user();
+
+        $query = Chatify::fetchMessagesQuery($request['id'], $user->id)->where('sent_by','shipper_admin')->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
         $totalMessages = $messages->total();
         $lastPage = $messages->lastPage();
@@ -266,14 +270,16 @@ class MessagesController extends Controller
      */
     public function getContacts(Request $request)
     {
+        $user = $request->user() ?? Auth::user();
+
         // get all users that received/sent message from/to [Auth user]
         $users = Message::join('customers',  function ($join) {
             $join->on('ch_messages.from_id', '=', 'customers.id')
                 ->orOn('ch_messages.to_id', '=', 'customers.id');
         })
-            ->where(function ($q) {
-                $q->where('ch_messages.from_id', Auth::user()->id)
-                    ->orWhere('ch_messages.to_id', Auth::user()->id);
+            ->where(function ($q) use ($user) {
+                $q->where('ch_messages.from_id', $user->id)
+                    ->orWhere('ch_messages.to_id', $user->id);
             })
             // ->where('customers.id','!=',Auth::guard('sanctum')->user()->id)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
@@ -349,8 +355,10 @@ class MessagesController extends Controller
      */
     public function getFavorites(Request $request)
     {
+        $user = $request->user() ?? Auth::user();
+
         $favoritesList = null;
-        $favorites = Favorite::where('user_id', Auth::user()->id);
+        $favorites = Favorite::where('user_id', $user->id);
         foreach ($favorites->get() as $favorite) {
             // get user data
             $user = User::where('id', $favorite->favorite_id)->first();
@@ -457,20 +465,22 @@ class MessagesController extends Controller
 
     public function updateSettings(Request $request)
     {
+        $user = $request->user() ?? Auth::user();
+
         $msg = null;
         $error = $success = 0;
 
         // dark mode
         if ($request['dark_mode']) {
             $request['dark_mode'] == "dark"
-                ? Admin::where('id', Auth::user()->id)->update(['dark_mode' => 1])  // Make Dark
-                : Admin::where('id', Auth::user()->id)->update(['dark_mode' => 0]); // Make Light
+                ? Admin::where('id', $user->id)->update(['dark_mode' => 1])  // Make Dark
+                : Admin::where('id', $user->id)->update(['dark_mode' => 0]); // Make Light
         }
 
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
-            Admin::where('id', Auth::user()->id)
+            Admin::where('id', $user->id)
                 ->update(['messenger_color' => $messenger_color]);
         }
         // if there is a [file]
@@ -483,15 +493,15 @@ class MessagesController extends Controller
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
                 if (in_array(strtolower($file->extension()), $allowed_images)) {
                     // delete the older one
-                    if (Auth::user()->avatar != config('chatify.user_avatar.default')) {
-                        $avatar = Auth::user()->avatar;
+                    if ($user->avatar != config('chatify.user_avatar.default')) {
+                        $avatar = $user->avatar;
                         if (Chatify::storage()->exists($avatar)) {
                             Chatify::storage()->delete($avatar);
                         }
                     }
                     // upload
                     $avatar = Str::uuid() . "." . $file->extension();
-                    $update = Admin::where('id', Auth::user()->id)->update(['avatar' => $avatar]);
+                    $update = Admin::where('id', $user->id)->update(['avatar' => $avatar]);
                     $file->storeAs(config('chatify.user_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
                     $success = $update ? 1 : 0;
                 } else {
@@ -520,8 +530,10 @@ class MessagesController extends Controller
      */
     public function setActiveStatus(Request $request)
     {
+        $user = $request->user() ?? Auth::user();
+
         $activeStatus = $request['status'] > 0 ? 1 : 0;
-        $status = User::where('id', Auth::user()->id)->update(['active_status' => $activeStatus]);
+        $status = User::where('id', $user->id)->update(['active_status' => $activeStatus]);
         return Response::json([
             'status' => $status,
         ], 200);
