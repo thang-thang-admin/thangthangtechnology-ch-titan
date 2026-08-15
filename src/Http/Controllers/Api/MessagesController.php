@@ -56,7 +56,6 @@ class MessagesController extends Controller
      */
     public function idFetchData(Request $request)
     {
-        return auth()->user();
         // Favorite
         $favorite = Chatify::inFavorite($request['id']);
 
@@ -106,6 +105,17 @@ class MessagesController extends Controller
      */
     public function send(Request $request)
     {
+        // 1. User ကို Guard ဖြင့် သို့မဟုတ် request user ဖြင့် လုံခြုံစွာ ဆွဲထုတ်ရန်
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        //user
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $fromId = $user->id;
+
         // default variables
         $error = (object)[
             'status' => 0,
@@ -116,47 +126,24 @@ class MessagesController extends Controller
 
         //if there is attachment [file]
         if ($request->hasFile('file')) {
-            // allowed extensions
             $allowed_images = Chatify::getAllowedImages();
             $allowed_files  = Chatify::getAllowedFiles();
             $allowed        = array_merge($allowed_images, $allowed_files);
 
             $file = $request->file('file');
-            // check file size
-            // if ($file->getSize() < Chatify::getMaxUploadSize()) {
-            //     if (in_array(strtolower($file->extension()), $allowed)) {
-            //         // get attachment name
-            //         $attachment_title = $file->getClientOriginalName();
-            //         // upload attachment and store the new name
-            //         $attachment = Str::uuid() . "." . $file->extension();
-            //         $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
-            //     } else {
-            //         $error->status = 1;
-            //         $error->message = "File extension not allowed!";
-            //     }
-            // } else {
-            //     $error->status = 1;
-            //     $error->message = "File size you are trying to upload is too large!";
-            // }
             $extension = strtolower($file->extension());
 
             if (in_array($extension, $allowed)) {
-                // get attachment name
                 $attachment_title = $file->getClientOriginalName();
-
-                // generate unique file name
                 $uniqueName = Str::uuid() . "." . $extension;
 
-                // upload file to S3 disk
                 $filePath = $file->storeAs(
-                    'profile_files',  // e.g. 'attachments'
+                    'profile_files',
                     $uniqueName,
-                    config('chatify.storage_disk_name')    // e.g. 's3'
+                    config('chatify.storage_disk_name')
                 );
 
-                // get full URL for the stored file on S3
                 $attachment = Storage::disk(config('chatify.storage_disk_name'))->url($filePath);
-
             } else {
                 $error->status = 1;
                 $error->message = "File extension not allowed!";
@@ -167,7 +154,7 @@ class MessagesController extends Controller
             // send to database
             $message = Chatify::newMessage([
                 'type' => $request['type'],
-                'from_id' => Auth::user()->id,
+                'from_id' => $fromId, // <-- $fromId ကို သုံးပါ
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => $request['type'] == 'shipper' ? 'shipper_admin' : 'shipper_admin',
@@ -181,13 +168,11 @@ class MessagesController extends Controller
             $messageData = Chatify::parseMessage($message);
 
             // send to user using pusher
-            // if (Auth::user()->id != $request['id']) {
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => Auth::user()->id,
+                'from_id' => $fromId, // <-- ဤနေရာတွင်လည်း Auth::user()->id အစား $fromId ကို သုံးပါ
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
-            // }
         }
 
         // send the response
@@ -195,7 +180,7 @@ class MessagesController extends Controller
             'status' => '200',
             'error' => $error,
             'message' => $messageData ?? [],
-            'tempID' => $request['temporaryMsgId'],
+            'tempID' => $request['temporaryMsgId'] ?? null,
         ]);
     }
 
