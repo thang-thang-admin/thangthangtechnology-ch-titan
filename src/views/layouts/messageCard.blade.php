@@ -7,7 +7,8 @@ $timeAndSeen =
     " <span class='time'>$timeAgo</span>
     </span>";
 $audioId = substr(md5(uniqid(mt_rand(), true)), 0, 8);
-$messenger_color = App\Models\Admin::first()->messenger_color;
+// Safely resolve the messenger color (admins table uses `message_color`)
+$messenger_color = optional(App\Models\Admin::first())->message_color;
 $senderColor = $messenger_color ? $messenger_color : Chatify::getFallbackColor();
 ?>
 

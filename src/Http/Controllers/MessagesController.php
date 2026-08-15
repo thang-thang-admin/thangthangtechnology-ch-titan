@@ -64,7 +64,9 @@ class MessagesController extends Controller
             abort(401, 'Unauthenticated');
         }
 
-        $messenger_color = $user->messenger_color;
+        // Admins table uses `message_color` while the original chatify
+        // package expects `messenger_color` - resolve safely.
+        $messenger_color = $user->messenger_color ?? $user->message_color ?? null;
 
         return view('Chatify::pages.app', [
             'id' => $id ?? 0,
@@ -82,10 +84,21 @@ class MessagesController extends Controller
      */
     public function idFetchData(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? $request->user() ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         $favorite = Chatify::inFavorite($request['id']);
         $fetch = User::where('id', $request['id'])->first();
         if ($fetch) {
-            $userAvatar = Chatify::getUserWithAvatar($fetch)->avatar;
+            $fetch = Chatify::getUserWithAvatar($fetch);
+            // The frontend (code.js) expects `fetch.name` while the
+            // Customer model uses `customer_name`
+            $fetch->name = $fetch->customer_name ?? $fetch->name ?? '';
+            $userAvatar = $fetch->image;
         }
         return Response::json([
             'favorite' => $favorite,
@@ -233,7 +246,9 @@ class MessagesController extends Controller
             return response()->json(['message' => 'Not authenticated'], 401);
         }
 
-        $query = Chatify::fetchMessagesQuery($request['id'], $user->id)->where('sent_by','shipper_admin')->latest();
+        // Fetch ALL messages in the conversation (no sent_by filter so
+        // both admin-sent and customer-sent messages are included)
+        $query = Chatify::fetchMessagesQuery($request['id'], $user->id)->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
         $totalMessages = $messages->total();
         $lastPage = $messages->lastPage();
@@ -305,7 +320,7 @@ class MessagesController extends Controller
                 $q->where('ch_messages.from_id', $fromId)
                     ->orWhere('ch_messages.to_id', $fromId);
             })
-            // ->where('customers.id','!=',Auth::guard('sanctum')->user()->id)
+            ->where('customers.id', '!=', $fromId)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
             ->orderBy('max_created_at', 'desc')
             ->groupBy('customers.id')
@@ -516,8 +531,9 @@ class MessagesController extends Controller
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
+            // Admins table uses `message_color` column
             Admin::where('id', $fromId)
-                ->update(['messenger_color' => $messenger_color]);
+                ->update(['message_color' => $messenger_color]);
         }
         // if there is a [file]
         if ($request->hasFile('avatar')) {

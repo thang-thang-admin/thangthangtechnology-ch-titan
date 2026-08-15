@@ -1,18 +1,20 @@
 {{-- -------------------- Saved Messages -------------------- --}}
 @if($get == 'saved')
-    {{-- <table class="messenger-list-item" data-contact="{{ Auth::user()->id }}" data-model="User">
+    <table class="messenger-list-item" data-contact="1">
         <tr data-action="0">
+            {{-- Avatar side --}}
             <td>
             <div class="saved-messages avatar av-m">
                 <span class="far fa-bookmark"></span>
             </div>
             </td>
+            {{-- center side --}}
             <td>
-                <p data-id="{{ optional(auth()->user())->id }}" data-type="user">Saved Messages <span>You</span></p>
+                <p data-id="1" data-type="user">Saved Messages <span>You</span></p>
                 <span>Save messages secretly</span>
             </td>
         </tr>
-    </table> --}}
+    </table>
 @endif
 
 {{-- -------------------- Contact list -------------------- --}}
@@ -20,8 +22,9 @@
 <?php
 $lastMessageBody = mb_convert_encoding($lastMessage->body, 'UTF-8', 'UTF-8');
 $lastMessageBody = strlen($lastMessageBody) > 30 ? mb_substr($lastMessageBody, 0, 30, 'UTF-8').'..' : $lastMessageBody;
+$displayName = $user->customer_name ?? $user->name ?? '';
 ?>
-<table class="messenger-list-item" data-contact="{{ $user->id }}" data-model="Customer">
+<table class="messenger-list-item" data-contact="{{ $user->id }}">
     <tr data-action="0">
         {{-- Avatar side --}}
         <td style="position: relative">
@@ -29,13 +32,14 @@ $lastMessageBody = strlen($lastMessageBody) > 30 ? mb_substr($lastMessageBody, 0
                 <span class="activeStatus"></span>
             @endif
         <div class="avatar av-m"
-        style="background-image: url('{{ $user->image }}');">
+            style="background-image: url('{{ $user->image ?? asset('assets/images/user.jpg') }}');">
         </div>
+
         </td>
         {{-- center side --}}
         <td>
         <p data-id="{{ $user->id }}" data-type="user">
-            {{ strlen($user->customer_name) > 12 ? trim(substr($user->customer_name,0,12)).'..' : $user->customer_name }}
+            {{ strlen($displayName) > 12 ? trim(substr($displayName,0,12)).'..' : $displayName }}
             <span class="contact-item-time" data-time="{{$lastMessage->created_at}}">{{ $lastMessage->timeAgo }}</span></p>
         <span>
             {{-- Last Message user indicator --}}
@@ -54,7 +58,7 @@ $lastMessageBody = strlen($lastMessageBody) > 30 ? mb_substr($lastMessageBody, 0
             @endif
         </span>
         {{-- New messages counter --}}
-        <div class="unseen-counter" style="display: inline;">{!! $unseenCounter > 0 ? "<b>".$unseenCounter."</b>" : '' !!}</div>
+            {!! $unseenCounter > 0 ? "<b>".$unseenCounter."</b>" : '' !!}
         </td>
     </tr>
 </table>
@@ -62,18 +66,20 @@ $lastMessageBody = strlen($lastMessageBody) > 30 ? mb_substr($lastMessageBody, 0
 
 {{-- -------------------- Search Item -------------------- --}}
 @if($get == 'search_item')
+<?php $displayName = $user->customer_name ?? $user->name ?? ''; ?>
 <table class="messenger-list-item" data-contact="{{ $user->id }}">
     <tr data-action="0">
         {{-- Avatar side --}}
         <td>
         <div class="avatar av-m"
-        style="background-image: url('{{ $user->image }}');">
+            style="background-image: url('{{ $user->image ?? asset('assets/images/user.jpg') }}');">
         </div>
+
         </td>
         {{-- center side --}}
         <td>
             <p data-id="{{ $user->id }}" data-type="user">
-            {{ strlen($user->customer_name) > 12 ? trim(substr($user->customer_name,0,12)).'..' : $user->customer_name }}
+            {{ strlen($displayName) > 12 ? trim(substr($displayName,0,12)).'..' : $displayName }}
         </td>
 
     </tr>

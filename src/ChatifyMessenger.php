@@ -169,7 +169,7 @@ class ChatifyMessenger
             'timeAgo' => $msg->created_at->diffForHumans(),
             'created_at' => $msg->created_at->toIso8601String(),
             'sent_by' => $msg->sent_by,
-            // 'isSender' => ($msg->from_id == Auth::guard('sanctum')->user()->id),
+            'isSender' => ($msg->from_id == $this->getAuthId()),
             'seen' => $msg->seen,
         ];
     }
@@ -198,10 +198,16 @@ class ChatifyMessenger
      * @param int $user_id
      * @return Message|\Illuminate\Database\Eloquent\Builder
      */
-    public function fetchMessagesQuery($user_id, $auth_id = 1)
+    public function fetchMessagesQuery($user_id, $auth_id = null)
     {
-        return Message::where('from_id', $auth_id)->where('to_id', $user_id)
-                    ->orWhere('from_id', $user_id)->where('to_id', $auth_id);
+        $auth_id = $auth_id ?: $this->getAuthId();
+
+        return Message::where(function ($q) use ($auth_id, $user_id) {
+                    $q->where('from_id', $auth_id)->where('to_id', $user_id);
+                })
+                ->orWhere(function ($q) use ($auth_id, $user_id) {
+                    $q->where('from_id', $user_id)->where('to_id', $auth_id);
+                });
     }
 
     /**
@@ -312,13 +318,18 @@ class ChatifyMessenger
      */
     public function getUserWithAvatar($user)
     {
-        if ($user->image == 'avatar.png' && config('chatify.gravatar.enabled')) {
+        // Resolve avatar from the available attributes (image / avatar / profile)
+        $image = $user->image ?? $user->avatar ?? $user->profile ?? null;
+
+        if ($image == 'avatar.png' && config('chatify.gravatar.enabled')) {
             $imageSize = config('chatify.gravatar.image_size');
             $imageset = config('chatify.gravatar.imageset');
-            $user->image = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($user->email))) . '?s=' . $imageSize . '&d=' . $imageset;
-        } else {
-            $user->image = self::getUserAvatarUrl($user->profile);
+            $image = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($user->email ?? ''))) . '?s=' . $imageSize . '&d=' . $imageset;
+        } elseif (empty($image)) {
+            $image = self::getUserAvatarUrl(null);
         }
+
+        $user->image = $image;
         return $user;
     }
 
