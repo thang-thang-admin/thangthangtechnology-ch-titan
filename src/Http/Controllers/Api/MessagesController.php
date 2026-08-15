@@ -167,7 +167,7 @@ class MessagesController extends Controller
             // send to database
             $message = Chatify::newMessage([
                 'type' => $request['type'],
-                'from_id' => Auth::guard('admin')->user()->id,
+                'from_id' => Auth::user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => $request['type'] == 'shipper' ? 'shipper_admin' : 'shipper_admin',
@@ -181,9 +181,9 @@ class MessagesController extends Controller
             $messageData = Chatify::parseMessage($message);
 
             // send to user using pusher
-            // if (Auth::guard('admin')->user()->id != $request['id']) {
+            // if (Auth::user()->id != $request['id']) {
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => Auth::guard('admin')->user()->id,
+                'from_id' => Auth::user()->id,
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
@@ -269,10 +269,10 @@ class MessagesController extends Controller
             $messageData = Chatify::parseMessage($message);
 
             // send to user using pusher
-            // if (Auth::guard('admin')->user()->id != $request['id']) {
+            // if (Auth::user()->id != $request['id']) {
             // send to user using pusher
             Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
-                'from_id' => $fromId, // <-- Auth::guard('admin')->user()->id အစား အပေါ်မှာ ယူထားတဲ့ $fromId ကို သုံးပါ
+                'from_id' => $fromId, // <-- Auth::user()->id အစား အပေါ်မှာ ယူထားတဲ့ $fromId ကို သုံးပါ
                 'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
@@ -355,7 +355,7 @@ class MessagesController extends Controller
             ], 200);
         }
 
-        $user = Auth::guard('admin')->user();
+        $user = $request->user('sanctum') ?? Auth::user();
 
         if (!$user) {
             return response()->json(['error' => 'Unauthenticated'], 401);
@@ -478,10 +478,10 @@ class MessagesController extends Controller
                 ->orOn('ch_messages.to_id', '=', 'customers.id');
         })
             ->where(function ($q) {
-                $q->where('ch_messages.from_id', Auth::guard('admin')->user()->id)
-                    ->orWhere('ch_messages.to_id', Auth::guard('admin')->user()->id);
+                $q->where('ch_messages.from_id', Auth::user()->id)
+                    ->orWhere('ch_messages.to_id', Auth::user()->id);
             })
-            ->where('customers.id', '!=', Auth::guard('admin')->user()->id)
+            ->where('customers.id', '!=', Auth::user()->id)
             ->select('customers.*', DB::raw('MAX(ch_messages.created_at) max_created_at'))
             ->orderBy('max_created_at', 'desc')
             ->groupBy('customers.id')
@@ -521,7 +521,7 @@ class MessagesController extends Controller
      */
     public function getFavorites(Request $request)
     {
-        $favorites = Favorite::where('user_id', Auth::guard('admin')->user()->id)->get();
+        $favorites = Favorite::where('user_id', Auth::user()->id)->get();
         foreach ($favorites as $favorite) {
             $favorite->user = User::where('id', $favorite->favorite_id)->first();
         }
@@ -540,7 +540,7 @@ class MessagesController extends Controller
     public function search(Request $request)
     {
         $input = trim(filter_var($request['input']));
-        $records = User::where('id', '!=', Auth::guard('admin')->user()->id)
+        $records = User::where('id', '!=', Auth::user()->id)
             ->where('name', 'LIKE', "%{$input}%")
             ->paginate($request->per_page ?? $this->perPage);
         foreach ($records->items() as $index => $record) {
@@ -616,14 +616,14 @@ class MessagesController extends Controller
         // dark mode
         if ($request['dark_mode']) {
             $request['dark_mode'] == "dark"
-                ? User::where('id', Auth::guard('admin')->user()->id)->update(['dark_mode' => 1])  // Make Dark
-                : User::where('id', Auth::guard('admin')->user()->id)->update(['dark_mode' => 0]); // Make Light
+                ? User::where('id', Auth::user()->id)->update(['dark_mode' => 1])  // Make Dark
+                : User::where('id', Auth::user()->id)->update(['dark_mode' => 0]); // Make Light
         }
 
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
-            User::where('id', Auth::guard('admin')->user()->id)
+            User::where('id', Auth::user()->id)
                 ->update(['messenger_color' => $messenger_color]);
         }
         // if there is a [file]
@@ -636,15 +636,15 @@ class MessagesController extends Controller
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
                 if (in_array(strtolower($file->extension()), $allowed_images)) {
                     // delete the older one
-                    if (Auth::guard('admin')->user()->avatar != config('chatify.user_avatar.default')) {
-                        $path = Chatify::getUserAvatarUrl(Auth::guard('admin')->user()->avatar);
+                    if (Auth::user()->avatar != config('chatify.user_avatar.default')) {
+                        $path = Chatify::getUserAvatarUrl(Auth::user()->avatar);
                         if (Chatify::storage()->exists($path)) {
                             Chatify::storage()->delete($path);
                         }
                     }
                     // upload
                     $avatar = Str::uuid() . "." . $file->extension();
-                    $update = User::where('id', Auth::guard('admin')->user()->id)->update(['avatar' => $avatar]);
+                    $update = User::where('id', Auth::user()->id)->update(['avatar' => $avatar]);
                     $file->storeAs(config('chatify.user_avatar.folder'), $avatar, config('chatify.storage_disk_name'));
                     $success = $update ? 1 : 0;
                 } else {
@@ -674,7 +674,7 @@ class MessagesController extends Controller
     public function setActiveStatus(Request $request)
     {
         $activeStatus = $request['status'] > 0 ? 1 : 0;
-        $status = User::where('id', Auth::guard('admin')->user()->id)->update(['active_status' => $activeStatus]);
+        $status = User::where('id', Auth::user()->id)->update(['active_status' => $activeStatus]);
         return Response::json([
             'status' => $status,
         ], 200);
