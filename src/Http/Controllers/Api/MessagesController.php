@@ -56,15 +56,23 @@ class MessagesController extends Controller
      */
     public function idFetchData(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         // Favorite
         $favorite = Chatify::inFavorite($request['id']);
 
         // User data
-        if ($request['type'] == 'user') {
-            $fetch = User::where('id', $request['id'])->first();
-            if ($fetch) {
-                $userAvatar = Chatify::getUserWithAvatar($fetch)->avatar;
-            }
+        $fetch = User::where('id', $request['id'])->first();
+        if ($fetch) {
+            $fetch = Chatify::getUserWithAvatar($fetch);
+            // The frontend expects `fetch.name` while the Customer model uses `customer_name`
+            $fetch->name = $fetch->customer_name ?? $fetch->name ?? '';
+            $userAvatar = $fetch->image;
         }
 
         // send the response
@@ -391,7 +399,14 @@ class MessagesController extends Controller
      */
     public function fetch(Request $request)
     {
-        $query = Chatify::fetchMessagesQuery($request['id'])->latest();
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
+        $query = Chatify::fetchMessagesQuery($request['id'], $user->id)->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
 
         $decodedMessages = $messages->map(function ($message) {
@@ -438,6 +453,13 @@ class MessagesController extends Controller
      */
     public function seen(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         // make as seen
         $seen = Chatify::makeSeen($request['id']);
         // send the response
@@ -493,6 +515,13 @@ class MessagesController extends Controller
      */
     public function favorite(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         $userId = $request['user_id'];
         // check action [star/unstar]
         $favoriteStatus = Chatify::inFavorite($userId) ? 0 : 1;
@@ -546,7 +575,7 @@ class MessagesController extends Controller
 
         $input = trim(filter_var($request['input']));
         $records = User::where('id', '!=', $user->id)
-            ->where('name', 'LIKE', "%{$input}%")
+            ->where('customer_name', 'LIKE', "%{$input}%")
             ->paginate($request->per_page ?? $this->perPage);
         foreach ($records->items() as $index => $record) {
             $records[$index] += Chatify::getUserWithAvatar($record);
@@ -580,14 +609,18 @@ class MessagesController extends Controller
 
     public function sharedPhotos(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         $images = Chatify::getSharedPhotos($request['user_id']);
 
         foreach ($images as $key => $image) {
-            // Build the S3 path for each file
-            $filePath = config('chatify.attachments.folder') . '/' . $image;
-
-            // Generate full URL from S3
-            $images[$key] = Storage::disk('s3')->url($filePath);
+            // getAttachmentUrl now returns full URLs as-is (no double-encoding)
+            $images[$key] = Chatify::getAttachmentUrl($image);
         }
 
         return Response::json([
@@ -604,6 +637,13 @@ class MessagesController extends Controller
      */
     public function deleteConversation(Request $request)
     {
+        // Safely resolve the authenticated user (sanctum guard first, then default guard)
+        $user = $request->user('sanctum') ?? Auth::user();
+
+        if (!$user) {
+            return response()->json(['message' => 'Not authenticated'], 401);
+        }
+
         // delete
         $delete = Chatify::deleteConversation($request['id']);
 
@@ -637,8 +677,9 @@ class MessagesController extends Controller
         // If messenger color selected
         if ($request['messengerColor']) {
             $messenger_color = trim(filter_var($request['messengerColor']));
+            // Customer table uses `message_color` column
             User::where('id', $fromId)
-                ->update(['messenger_color' => $messenger_color]);
+                ->update(['message_color' => $messenger_color]);
         }
         // if there is a [file]
         if ($request->hasFile('avatar')) {
