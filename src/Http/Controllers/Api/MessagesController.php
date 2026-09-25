@@ -141,7 +141,11 @@ class MessagesController extends Controller
             $file = $request->file('file');
             $extension = strtolower($file->extension());
 
-            if (in_array($extension, $allowed)) {
+            if ($this->isEmptyAudioFile($file, $extension)) {
+                // Mobile recorder sometimes uploads an unfinalized m4a (header only, ~28 bytes) that can never play
+                $error->status = 1;
+                $error->message = "Voice message is empty or incomplete. Please record again.";
+            } elseif (in_array($extension, $allowed)) {
                 $attachment_title = $file->getClientOriginalName();
                 $uniqueName = Str::uuid() . "." . $extension;
 
@@ -221,7 +225,11 @@ class MessagesController extends Controller
             $file = $request->file('file');
             $extension = strtolower($file->extension());
 
-            if (in_array($extension, $allowed)) {
+            if ($this->isEmptyAudioFile($file, $extension)) {
+                // Mobile recorder sometimes uploads an unfinalized m4a (header only, ~28 bytes) that can never play
+                $error->status = 1;
+                $error->message = "Voice message is empty or incomplete. Please record again.";
+            } elseif (in_array($extension, $allowed)) {
                 // get attachment name
                 $attachment_title = $file->getClientOriginalName();
 
@@ -280,6 +288,14 @@ class MessagesController extends Controller
             'message' => $messageData ?? [],
             'tempID' => $request['temporaryMsgId'],
         ]);
+    }
+
+    private function isEmptyAudioFile($file, $extension)
+    {
+        $audioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'opus', 'webm'];
+        $extension = strtolower(pathinfo($file->getClientOriginalName(), PATHINFO_EXTENSION)) ?: $extension;
+
+        return in_array($extension, $audioExtensions) && $file->getSize() < 1024;
     }
 
     private function getAttachmentLink($attachment)
