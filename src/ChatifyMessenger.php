@@ -150,7 +150,7 @@ class ChatifyMessenger
             $attachment = $attachmentOBJ->new_name;
             $attachment_title = htmlentities(trim($attachmentOBJ->old_name), ENT_QUOTES, 'UTF-8');
             $ext = pathinfo($attachment, PATHINFO_EXTENSION);
-            if ($ext == 'wav' || $ext == 'mp3') {
+            if (in_array(strtolower($ext), ['wav', 'mp3', 'webm', 'ogg', 'm4a', 'aac', 'opus'])) {
                 $attachment_type = 'audio';
             } else {
                 $attachment_type = in_array($ext, $this->getAllowedImages()) ? 'image' : 'file';

@@ -201,15 +201,23 @@ class MessagesController extends Controller
         }
 
         if (!$error->status) {
+            $attachmentData = null;
+            if ($attachment) {
+                $attachmentData = (object)[
+                    'new_name' => $attachment,
+                    'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
+                ];
+                // Store audio duration if provided (voice messages)
+                if ($request->type == 'audio' && $request->filled('duration')) {
+                    $attachmentData->duration = (int) $request->input('duration');
+                }
+            }
             $message = Chatify::newMessage([
                 'from_id' => $fromId,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
                 'sent_by' => 'admin',
-                'attachment' => ($attachment) ? json_encode((object)[
-                    'new_name' => $attachment,
-                    'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
-                ]) : null,
+                'attachment' => ($attachmentData) ? json_encode($attachmentData) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
